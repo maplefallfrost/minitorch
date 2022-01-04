@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 variable_count = 1
 
 
@@ -190,8 +192,7 @@ class History:
         Returns:
             list of numbers : a derivative with respect to `inputs`
         """
-        # TODO: Implement for Task 1.4.
-        raise NotImplementedError('Need to implement for Task 1.4')
+        return self.last_fn.chain_rule(self.ctx, self.inputs, d_output)
 
 
 class FunctionBase:
@@ -273,8 +274,10 @@ class FunctionBase:
         """
         # Tip: Note when implementing this function that
         # cls.backward may return either a value or a tuple.
-        # TODO: Implement for Task 1.3.
-        raise NotImplementedError('Need to implement for Task 1.3')
+        derivs = wrap_tuple(cls.backward(ctx, d_output))
+        return [
+            (var, deriv) for var, deriv in zip(inputs, derivs) if not is_constant(var)
+        ]
 
 
 # Algorithms for backpropagation
@@ -295,8 +298,18 @@ def topological_sort(variable):
         list of Variables : Non-constant Variables in topological order
                             starting from the right.
     """
-    # TODO: Implement for Task 1.4.
-    raise NotImplementedError('Need to implement for Task 1.4')
+    topo_orders, count = [variable], 0
+    visited = set(variable.unique_id)
+    while count < len(topo_orders):
+        cur_var = topo_orders[count]
+        if not cur_var.is_leaf():
+            history = cur_var.history
+            for input_ in history.inputs:
+                if not is_constant(input_) and input_.unique_id not in visited:
+                    topo_orders.append(input_)
+                    visited.add(input_.unique_id)
+        count += 1
+    return topo_orders
 
 
 def backpropagate(variable, deriv):
@@ -312,5 +325,15 @@ def backpropagate(variable, deriv):
 
     No return. Should write to its results to the derivative values of each leaf through `accumulate_derivative`.
     """
-    # TODO: Implement for Task 1.4.
-    raise NotImplementedError('Need to implement for Task 1.4')
+    topo_orders = topological_sort(variable)
+    var_to_deriv = defaultdict(float)
+    var_to_deriv[variable.unique_id] = deriv
+    for var in topo_orders:
+        cur_deriv = var_to_deriv[var.unique_id]
+        if var.is_leaf():
+            var.accumulate_derivative(cur_deriv)
+        else:
+            history = var.history
+            pre_var_derivs = history.backprop_step(cur_deriv)
+            for input_, pre_deriv in pre_var_derivs:
+                var_to_deriv[input_.unique_id] += pre_deriv
